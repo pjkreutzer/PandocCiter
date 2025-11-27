@@ -1,32 +1,29 @@
-"use strict";
+import * as vscode from 'vscode';
+import { Manager } from './components/manager';
+import { Completer } from './providers/completion';
+import { HoverProvider } from './providers/hover';
+import { DefinitionProvider } from './providers/definition';
+import { host } from './adapters/host';
 
-import * as vscode from "vscode";
-
-import { Manager } from "./components/manager";
-import { Completer } from "./providers/completion";
-import { HoverProvider } from "./providers/hover";
-import { DefinitionProvider } from "./providers/definition";
-
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: any) {
   const extension = new Extension();
 
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument(() => {
-      extension.log("Reacting to document open");
-      if (vscode.window.activeTextEditor) {
+    host.onDidOpenTextDocument(() => {
+      extension.log('Reacting to document open');
+      if (host.activeTextEditor()) {
         extension.manager.findBib();
       }
     })
   );
 
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(() => {
-      extension.log("Reacting to active document change");
+    host.onDidChangeActiveTextEditor(() => {
+      extension.log('Reacting to active document change');
+      const editor = host.activeTextEditor();
       if (
-        vscode.window.activeTextEditor &&
-        ["markdown", "rmd", "pweave_md"].includes(
-          vscode.window.activeTextEditor.document.languageId
-        )
+        editor &&
+        ['markdown', 'rmd', 'pweave_md'].includes(editor.document.languageId)
       ) {
         extension.manager.findBib();
       }
@@ -34,34 +31,28 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument(() => {
-      extension.log("Reacting to document save");
-      if (vscode.window.activeTextEditor) {
+    host.onDidSaveTextDocument(() => {
+      extension.log('Reacting to document save');
+      if (host.activeTextEditor()) {
         extension.manager.findBib();
       }
     })
   );
 
-  const selector = ["markdown", "rmd", "pweave_md", "quarto"].map(
-    (language) => {
-      return { scheme: "file", language: language };
-    }
-  );
+  const selector = ['markdown', 'rmd', 'pweave_md', 'quarto'].map(language => {
+    return { scheme: 'file', language: language };
+  });
 
   extension.manager.findBib();
   context.subscriptions.push(
-    vscode.languages.registerCompletionItemProvider(
+    host.registerCompletionItemProvider(
       selector,
       extension.completer,
-      "@"
+      '@'
     )
   );
-  context.subscriptions.push(
-    vscode.languages.registerHoverProvider(selector, extension.hover)
-  );
-  context.subscriptions.push(
-    vscode.languages.registerDefinitionProvider(selector, extension.definition)
-  );
+  context.subscriptions.push(host.registerHoverProvider(selector, extension.hover));
+  context.subscriptions.push(host.registerDefinitionProvider(selector, extension.definition));
 }
 
 export class Extension {
@@ -69,20 +60,23 @@ export class Extension {
   completer: Completer;
   hover: HoverProvider;
   definition: DefinitionProvider;
-  logPanel: vscode.OutputChannel;
+  logPanel: any;
 
   constructor() {
     this.manager = new Manager(this);
     this.completer = new Completer(this);
     this.hover = new HoverProvider(this);
     this.definition = new DefinitionProvider(this);
-    this.logPanel = vscode.window.createOutputChannel("PandocCiter");
+    this.logPanel = host.createOutputChannel('PandocCiter');
     this.log(`PandocCiter is now activated`);
   }
 
   log(msg: string) {
-    if (vscode.workspace.getConfiguration("PandocCiter").get("ShowLog")) {
-      this.logPanel.append(`${msg}\n`);
+    const cfg = host.getConfiguration('PandocCiter');
+    if (cfg && cfg.get && cfg.get('ShowLog')) {
+      // In VS Code this is append, in Zed adapter appendLine is supported
+      if (this.logPanel.appendLine) this.logPanel.appendLine(msg);
+      else if (this.logPanel.append) this.logPanel.append(msg + '\n');
     }
   }
 }
